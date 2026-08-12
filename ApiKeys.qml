@@ -14,6 +14,9 @@ Item {
   property bool cursorActive: false
   property bool deleteConfirmOpen: false
   property string deleteTarget: ""
+  property bool addFormOpen: false
+  property string addNotice: ""
+  property bool addReplaceArmed: false
   property var entries: []
 
   // Shares the [menu] surface tokens — themes that style the menu also
@@ -41,12 +44,13 @@ Item {
     root.cursorActive = true
     root.disarmPointer()
     listProc.running = true
-    root.rebuildDisplay()
+    root.rebuildDisplay(true)
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
   }
 
   function close() {
     root.cancelDelete()
+    root.closeAddForm()
     root.opened = false
   }
 
@@ -84,20 +88,41 @@ Item {
 
     parsed.sort(function(a, b) { return a.name.localeCompare(b.name) })
     root.entries = parsed
-    if (root.opened) root.rebuildDisplay()
+    // A first open lands before secret-tool has answered, so the cursor starts
+    // on the add row for want of anything else; move it to the first real key
+    // once one exists, but never yank it out from under an active filter.
+    if (root.opened) root.rebuildDisplay(root.selectedIndex === 0 && !root.filterText)
   }
 
-  function rebuildDisplay() {
+  // Returns the stored spelling of a name, matched case-insensitively, or ""
+  // if there is no such key. Mirrors the CLI's resolve_name.
+  function existingName(name) {
+    var needle = name.toLowerCase()
+    for (var i = 0; i < root.entries.length; i++) {
+      if (root.entries[i].name.toLowerCase() === needle) return root.entries[i].name
+    }
+    return ""
+  }
+
+  // Row 0 is always "Add new key", so the resting cursor is the first real
+  // key below it: type-to-filter then Enter still copies, the way it did
+  // before the add row existed.
+  function defaultIndex() {
+    return displayModel.count > 1 ? 1 : 0
+  }
+
+  function rebuildDisplay(resetCursor) {
     var filter = root.filterText.toLowerCase()
 
     displayModel.clear()
+    displayModel.append({ kind: "add", name: "Add new key…" })
     for (var i = 0; i < root.entries.length; i++) {
       var entry = root.entries[i]
       if (filter && entry.name.toLowerCase().indexOf(filter) === -1) continue
-      displayModel.append({ name: entry.name })
+      displayModel.append({ kind: "key", name: entry.name })
     }
 
-    if (displayModel.count === 0) selectedIndex = 0
+    if (resetCursor) selectedIndex = root.defaultIndex()
     else if (selectedIndex >= displayModel.count) selectedIndex = displayModel.count - 1
     else if (selectedIndex < 0) selectedIndex = 0
 
@@ -128,10 +153,9 @@ Item {
 
   function setFilter(nextFilter) {
     root.filterText = nextFilter
-    root.selectedIndex = 0
     root.cursorActive = true
     root.disarmPointer()
-    root.rebuildDisplay()
+    root.rebuildDisplay(true)
   }
 
   function disarmPointer() {
@@ -148,9 +172,74 @@ Item {
   // shell; it never enters this process or any argv. --sensitive keeps it
   // out of the clipboard-history capture; --trim-newline guards against a
   // stray trailing newline breaking a pasted key.
+  // Enter / click on a row. The add row is pinned at index 0, so every
+  // activation has to ask what it landed on before assuming a key.
+  function activate(index, paste) {
+    if (index < 0 || index >= displayModel.count) return
+    if (displayModel.get(index).kind === "add") root.openAddForm()
+    else if (paste) root.pasteIndex(index)
+    else root.copyIndex(index)
+  }
+
+  function openAddForm(name) {
+    root.addNotice = ""
+    root.addReplaceArmed = false
+    addName.text = name !== undefined ? name : root.filterText
+    addValue.text = ""
+    root.addFormOpen = true
+    root.disarmPointer()
+    Qt.callLater(function() {
+      addName.forceActiveFocus()
+      addName.selectAll()
+    })
+  }
+
+  function closeAddForm() {
+    // Drop the plaintext from the field's buffer as soon as the form goes
+    // away, rather than leaving it live in a plugin marked keepLoaded.
+    addName.text = ""
+    addValue.text = ""
+    root.addNotice = ""
+    root.addReplaceArmed = false
+    root.addFormOpen = false
+    root.disarmPointer()
+    Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+  }
+
+  function submitAdd() {
+    var name = addName.text.trim()
+    if (!name) {
+      root.addNotice = "Name is required."
+      addName.forceActiveFocus()
+      return
+    }
+    if (!addValue.text) {
+      root.addNotice = "Value is required."
+      addValue.forceActiveFocus()
+      return
+    }
+
+    // Keyring attributes match literally, so storing "openai" beside an
+    // existing "OPENAI" would leave two entries the CLI then refuses to
+    // resolve. Reuse the stored spelling, and make the overwrite deliberate —
+    // re-adding a rotated key is normal, doing it by accident isn't.
+    var existing = root.existingName(name)
+    if (existing && !root.addReplaceArmed) {
+      root.addNotice = "“" + existing + "” already exists — press Enter again to replace it."
+      root.addReplaceArmed = true
+      return
+    }
+
+    storeProc.pendingName = existing || name
+    storeProc.pendingValue = addValue.text
+    storeProc.running = true
+    root.closeAddForm()
+  }
+
   function copyIndex(index) {
     if (index < 0 || index >= displayModel.count) return
     var row = displayModel.get(index)
+    if (row.kind !== "key") return
     root.opened = false
     Quickshell.execDetached(["bash", "-c",
       'secret-tool lookup service api-keys name "$1" | wl-copy --trim-newline --sensitive',
@@ -160,6 +249,7 @@ Item {
   function pasteIndex(index) {
     if (index < 0 || index >= displayModel.count) return
     var row = displayModel.get(index)
+    if (row.kind !== "key") return
     root.opened = false
     Quickshell.execDetached(["bash", "-c",
       'secret-tool lookup service api-keys name "$1" | wl-copy --trim-newline --sensitive && sleep 0.15 && wtype -M shift -k Insert -m shift',
@@ -168,6 +258,7 @@ Item {
 
   function requestDelete(index) {
     if (index < 0 || index >= displayModel.count) return
+    if (displayModel.get(index).kind !== "key") return
     root.deleteTarget = displayModel.get(index).name
     deleteConfirm.selectedIndex = 1
     root.deleteConfirmOpen = true
@@ -213,6 +304,27 @@ Item {
     onExited: listProc.running = true
   }
 
+  // The one place a secret value flows inward. It goes over stdin rather than
+  // argv, which any process on the machine can read out of /proc. secret-tool
+  // reads until stdin closes and stores what it got verbatim — no trailing
+  // newline is written, and stdin is closed immediately to mark the end.
+  Process {
+    id: storeProc
+    property string pendingName: ""
+    property string pendingValue: ""
+    stdinEnabled: true
+    command: ["secret-tool", "store", "--label=" + pendingName, "service", "api-keys", "name", pendingName]
+    onStarted: {
+      write(pendingValue)
+      pendingValue = ""
+      stdinEnabled = false
+    }
+    onExited: {
+      stdinEnabled = true
+      listProc.running = true
+    }
+  }
+
   PanelWindow {
     id: panel
     visible: root.opened
@@ -248,17 +360,24 @@ Item {
       Item {
         id: keyCatcher
         anchors.fill: parent
-        z: root.deleteConfirmOpen ? 20 : 0
+        z: (root.deleteConfirmOpen || root.addFormOpen) ? 20 : 0
         focus: true
 
         Keys.priority: Keys.BeforeItem
         Keys.onPressed: function(event) {
+          // The form's TextFields own input while it's open — Tab, Escape and
+          // every printable key belong to them, not to the filter.
+          if (root.addFormOpen) return
+
           if (root.deleteConfirmOpen) {
             if (deleteConfirm.handleKey(event)) event.accepted = true
             return
           }
 
-          if (event.key === Qt.Key_Escape) {
+          if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_N) {
+            root.openAddForm()
+            event.accepted = true
+          } else if (event.key === Qt.Key_Escape) {
             if (root.filterText) root.setFilter("")
             else root.close()
             event.accepted = true
@@ -287,12 +406,159 @@ Item {
             root.selectAbsolute(displayModel.count - 1)
             event.accepted = true
           } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-            if (event.modifiers & Qt.ShiftModifier) root.pasteIndex(root.selectedIndex)
-            else root.copyIndex(root.selectedIndex)
+            root.activate(root.selectedIndex, (event.modifiers & Qt.ShiftModifier) !== 0)
             event.accepted = true
           } else if (event.text && event.text.length === 1 && event.text.charCodeAt(0) >= 32 && event.text.charCodeAt(0) !== 127) {
             root.setFilter(root.filterText + event.text)
             event.accepted = true
+          }
+        }
+
+        // Add form. Tab and Shift+Tab cycle the two fields explicitly rather
+        // than leaning on the window-wide focus chain, which would wander off
+        // into the list behind it. Enter submits from either field.
+        Item {
+          id: addForm
+
+          anchors.fill: parent
+          visible: root.addFormOpen
+          z: 10
+
+          Rectangle {
+            anchors.fill: parent
+            color: root.scrim
+
+            MouseArea { anchors.fill: parent; onClicked: root.closeAddForm() }
+
+            BorderSurface {
+              id: addCard
+              width: Math.min(parent.width - Style.space(32), Style.space(370))
+              height: addCard.contentTopInset + addCard.contentBottomInset + addColumn.implicitHeight
+              anchors.centerIn: parent
+              color: root.background
+              borderSpec: Border.flat(root.selectedText, Style.normalBorderWidth)
+              padding: Style.space(18)
+              radius: root.cornerRadius
+
+              MouseArea { anchors.fill: parent; onClicked: {} }
+
+              Column {
+                id: addColumn
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.topMargin: addCard.contentTopInset
+                anchors.leftMargin: addCard.contentLeftInset
+                anchors.rightMargin: addCard.contentRightInset
+                spacing: Style.space(10)
+
+                Text {
+                  text: "Add API key"
+                  color: root.foreground
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.title
+                }
+
+                TextField {
+                  id: addName
+                  width: parent.width
+                  placeholderText: "Name  (e.g. OPENAI)"
+                  foreground: root.foreground
+                  font.family: root.fontFamily
+                  KeyNavigation.tab: addValue
+                  KeyNavigation.backtab: addValue
+                  onAccepted: root.submitAdd()
+                  // Retyping the name withdraws an armed replace: the warning
+                  // was about the old name, not whatever is in the field now.
+                  onTextChanged: {
+                    if (root.addReplaceArmed) {
+                      root.addReplaceArmed = false
+                      root.addNotice = ""
+                    }
+                  }
+                  Keys.onEscapePressed: root.closeAddForm()
+                }
+
+                TextField {
+                  id: addValue
+                  width: parent.width
+                  password: true
+                  placeholderText: "API key"
+                  foreground: root.foreground
+                  font.family: root.fontFamily
+                  KeyNavigation.tab: addName
+                  KeyNavigation.backtab: addName
+                  onAccepted: root.submitAdd()
+                  Keys.onEscapePressed: root.closeAddForm()
+                }
+
+                Text {
+                  width: parent.width
+                  visible: root.addNotice !== ""
+                  text: root.addNotice
+                  color: root.addReplaceArmed ? Color.urgent : root.foreground
+                  opacity: root.addReplaceArmed ? 1 : 0.7
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  wrapMode: Text.WordWrap
+                }
+
+                Item {
+                  width: parent.width
+                  height: Style.space(34)
+
+                  Text {
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "Tab switches fields"
+                    color: root.foreground
+                    opacity: 0.5
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                  }
+
+                  Row {
+                    anchors.right: parent.right
+                    spacing: Style.space(10)
+
+                    Repeater {
+                      model: ["Cancel", "Save"]
+
+                      BorderSurface {
+                        required property int index
+                        required property string modelData
+
+                        readonly property bool isSave: index === 1
+
+                        width: Style.space(88)
+                        height: Style.space(34)
+                        color: isSave ? root.selectedBackground : "transparent"
+                        borderSpec: Border.flat(isSave ? root.selectedText : Util.alpha(root.foreground, 0.38), Style.normalBorderWidth)
+                        radius: 0
+
+                        Text {
+                          anchors.centerIn: parent
+                          text: modelData
+                          color: isSave ? root.selectedText : root.foreground
+                          font.family: root.fontFamily
+                          font.pixelSize: Style.font.caption
+                        }
+
+                        MouseArea {
+                          anchors.fill: parent
+                          hoverEnabled: true
+                          cursorShape: Qt.PointingHandCursor
+                          onClicked: {
+                            if (isSave) root.submitAdd()
+                            else root.closeAddForm()
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
 
@@ -359,7 +625,9 @@ Item {
               id: row
               required property int index
               required property string name
+              required property string kind
 
+              readonly property bool isAdd: kind === "add"
               readonly property bool hasCursor: root.cursorActive && index === root.selectedIndex
 
               width: ListView.view.width
@@ -374,7 +642,7 @@ Item {
                 spacing: Style.space(10)
 
                 Text {
-                  text: "󰌆"
+                  text: row.isAdd ? "󰐕" : "󰌆"
                   height: parent.height
                   color: row.hasCursor ? root.selectedText : root.foreground
                   opacity: 0.7
@@ -388,6 +656,7 @@ Item {
                   height: parent.height
                   text: row.name
                   color: row.hasCursor ? root.selectedText : root.foreground
+                  opacity: row.isAdd && !row.hasCursor ? 0.75 : 1
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.title
                   elide: Text.ElideRight
@@ -406,16 +675,18 @@ Item {
                 onClicked: {
                   root.cursorActive = true
                   root.selectedIndex = row.index
-                  root.copyIndex(row.index)
+                  root.activate(row.index, false)
                 }
               }
             }
           }
 
+          // The add row is always in the model, so "nothing here" means the
+          // list is down to that one row.
           Column {
             anchors.centerIn: parent
             spacing: Style.space(8)
-            visible: displayModel.count === 0
+            visible: displayModel.count <= 1
 
             Text {
               text: "󰌆"
@@ -428,7 +699,7 @@ Item {
             }
 
             Text {
-              text: root.entries.length === 0 ? "No API keys yet — add one with:  omakeys add <name>" : "No matches for “" + root.filterText + "”"
+              text: root.entries.length === 0 ? "No API keys yet — pick “Add new key” above" : "No matches for “" + root.filterText + "”"
               color: root.foreground
               opacity: 0.7
               font.family: root.fontFamily

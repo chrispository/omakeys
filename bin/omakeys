@@ -17,9 +17,12 @@ Usage:
   omakeys show <name>      Print a key to stdout
   omakeys rm <name>        Delete a key
   omakeys mv <old> <new>   Rename a key
-  omakeys import <file>    Bulk import "NAME=VALUE" or "NAME<whitespace>VALUE"
+  omakeys import <file|->  Bulk import "NAME=VALUE" or "NAME<whitespace>VALUE"
                            lines (blank lines and #comments skipped), then
-                           offer to shred the file
+                           offer to shred the file. "-" reads stdin.
+  omakeys export           Print every key as NAME=VALUE on stdout
+    --encrypt <file>       ...into a gpg passphrase-encrypted file instead
+    --yes                  Skip the plaintext confirmation
 EOF
   exit 1
 }
@@ -31,6 +34,70 @@ require_name() {
 store_key() {
   local name=$1 value=$2
   printf '%s' "$value" | secret-tool store --label="$name" service "$SERVICE" name "$name"
+}
+
+# secret-tool search prints matched items on stderr, not stdout
+list_names() {
+  secret-tool search --all service "$SERVICE" 2>&1 | sed -n 's/^attribute\.name = //p' | sort
+}
+
+# One NAME=VALUE line per key. Anything that wouldn't survive a round-trip
+# through import is skipped loudly rather than written out broken: a name
+# holding "=" would re-import split at the wrong place, and a multi-line
+# value can't be represented at all in a line-oriented format.
+emit_export() {
+  local name value skipped=0 count=0
+  while IFS= read -r name; do
+    [[ -n $name ]] || continue
+    if [[ $name == *=* ]]; then
+      echo "Skipping '$name': the name contains '=', which import can't round-trip." >&2
+      skipped=$((skipped + 1))
+      continue
+    fi
+    value=$(secret-tool lookup service "$SERVICE" name "$name")
+    if [[ $value == *$'\n'* ]]; then
+      echo "Skipping '$name': the value spans multiple lines." >&2
+      skipped=$((skipped + 1))
+      continue
+    fi
+    printf '%s=%s\n' "$name" "$value"
+    count=$((count + 1))
+  done < <(list_names)
+  if ((skipped)); then
+    echo "Exported $count key(s), skipped $skipped." >&2
+  else
+    echo "Exported $count key(s)." >&2
+  fi
+}
+
+# Reads NAME=VALUE / NAME<whitespace>VALUE lines from stdin. Splitting on the
+# first "=" is what lets a name contain spaces ("Cloudflare R2 Endpoint=..."),
+# so the whitespace form only has to cover lines with no "=" at all.
+import_lines() {
+  local line name value
+  count=0
+  while IFS= read -r line || [[ -n $line ]]; do
+    line=${line#"${line%%[![:space:]]*}"}
+    line=${line%"${line##*[![:space:]]}"}
+    [[ -z $line || $line == \#* ]] && continue
+    if [[ $line == *=* ]]; then
+      name=${line%%=*}
+      value=${line#*=}
+      name=${name%"${name##*[![:space:]]}"}
+    elif [[ $line =~ ^([^[:space:]]+)[[:space:]]+(.+)$ ]]; then
+      name=${BASH_REMATCH[1]} value=${BASH_REMATCH[2]}
+    else
+      echo "Skipping unparseable line: ${line%%[= ]*}…" >&2
+      continue
+    fi
+    if [[ -z $name || -z $value ]]; then
+      echo "Skipping line with an empty name or value." >&2
+      continue
+    fi
+    store_key "$name" "$value"
+    echo "Stored '$name'."
+    count=$((count + 1))
+  done
 }
 
 # gnome-keyring attribute matching is a literal string comparison (not a
@@ -80,8 +147,7 @@ add)
   echo "Stored '$2'."
   ;;
 list)
-  # secret-tool search prints matched items on stderr, not stdout
-  secret-tool search --all service "$SERVICE" 2>&1 | sed -n 's/^attribute\.name = //p' | sort
+  list_names
   ;;
 copy)
   require_name "${2:-}"
@@ -130,26 +196,17 @@ mv)
   ;;
 import)
   file=${2:-}
-  [[ -f $file ]] || { echo "No such file: $file" >&2; exit 1; }
-  count=0
-  while IFS= read -r line || [[ -n $line ]]; do
-    line=${line#"${line%%[![:space:]]*}"}
-    line=${line%"${line##*[![:space:]]}"}
-    [[ -z $line || $line == \#* ]] && continue
-    if [[ $line =~ ^([^=[:space:]]+)=(.+)$ ]]; then
-      name=${BASH_REMATCH[1]} value=${BASH_REMATCH[2]}
-    elif [[ $line =~ ^([^[:space:]]+)[[:space:]]+(.+)$ ]]; then
-      name=${BASH_REMATCH[1]} value=${BASH_REMATCH[2]}
-    else
-      echo "Skipping unparseable line: ${line%%[= ]*}…" >&2
-      continue
-    fi
-    store_key "$name" "$value"
-    echo "Stored '$name'."
-    count=$((count + 1))
-  done <"$file"
+  [[ -n $file ]] || { echo "Usage: omakeys import <file|->" >&2; exit 1; }
+  if [[ $file == "-" ]]; then
+    import_lines
+  else
+    [[ -f $file ]] || { echo "No such file: $file" >&2; exit 1; }
+    import_lines <"$file"
+  fi
   echo "Imported $count key(s)."
-  if [[ -t 0 && $count -gt 0 ]]; then
+  # Only a real file can be shredded, and only a tty can be asked. Reading
+  # stdin leaves nothing on disk to clean up.
+  if [[ $file != "-" && -t 0 && $count -gt 0 ]]; then
     read -rp "Shred and delete '$file' now? [Y/n] " answer
     if [[ -z $answer || $answer == [Yy]* ]]; then
       shred -u "$file"
@@ -157,6 +214,44 @@ import)
     else
       echo "Left '$file' in place — it holds plaintext keys, delete it when done."
     fi
+  fi
+  ;;
+export)
+  shift
+  encrypt_to="" assume_yes=0
+  while (($# > 0)); do
+    case "$1" in
+    --encrypt)
+      encrypt_to=${2:-}
+      [[ -n $encrypt_to ]] || { echo "--encrypt needs a file path" >&2; exit 1; }
+      shift 2
+      ;;
+    --yes | -y)
+      assume_yes=1
+      shift
+      ;;
+    *) echo "Unknown export option: $1" >&2; exit 1 ;;
+    esac
+  done
+
+  if [[ -n $encrypt_to ]]; then
+    command -v gpg >/dev/null || { echo "gpg is required for --encrypt" >&2; exit 1; }
+    [[ ! -e $encrypt_to ]] || { echo "'$encrypt_to' already exists; refusing to overwrite." >&2; exit 1; }
+    # 077 so the file is never briefly world-readable, even though gpg's own
+    # default is usually 600. pipefail makes a failed export abort the write.
+    (
+      umask 077
+      emit_export | gpg --quiet --symmetric --cipher-algo AES256 --output "$encrypt_to"
+    )
+    echo "Wrote encrypted export to '$encrypt_to'." >&2
+    echo "Restore it with:  gpg -d '$encrypt_to' | omakeys import -" >&2
+  else
+    if ((!assume_yes)) && [[ -t 0 ]]; then
+      echo "This prints every stored key in plaintext." >&2
+      read -rp "Continue? [y/N] " answer
+      [[ $answer == [Yy]* ]] || { echo "Aborted." >&2; exit 1; }
+    fi
+    emit_export
   fi
   ;;
 *)

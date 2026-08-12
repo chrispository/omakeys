@@ -58,6 +58,30 @@ that's the plugin's id, not part of the shortcut — so only the key chord in
 
 ## Use
 
+### The selector
+
+Press **Super + A**, type to filter, **Enter** copies the highlighted key
+(**Shift + Enter** pastes it straight into the focused window, **Delete**
+removes it).
+
+The first row is always **＋ Add new key**, so you never need to drop to a
+terminal to store one. Select it — or press **Ctrl + N** from anywhere in the
+list — and a small form opens with two fields:
+
+| Field | |
+| --- | --- |
+| **Name** | What you'll search for later, e.g. `OPENAI` |
+| **API key** | Masked as you type |
+
+**Tab** and **Shift + Tab** move between the two fields, **Enter** saves from
+either one, **Esc** cancels. Typing a name that already exists asks once
+before replacing it, so re-adding a rotated key is a deliberate act rather
+than an accident.
+
+The cursor still rests on the first *key* rather than the add row, so the
+muscle-memory path — Super + A, type, Enter — copies exactly like it did
+before.
+
 ### The CLI
 
 ```bash
@@ -68,6 +92,7 @@ omakeys show <name>      # print to stdout
 omakeys rm <name>        # delete
 omakeys mv <old> <new>   # rename (prompts before overwriting an existing name)
 omakeys import <file>    # bulk import, then offers to shred the file
+omakeys export           # print every key as NAME=VALUE on stdout
 ```
 
 ### Bulk import
@@ -88,6 +113,29 @@ After a successful import it offers to `shred -u` the file, since it holds
 plaintext keys. Never paste key values into AI chats or other remote services
 — keep the import file local.
 
+### Backup and moving machines
+
+If this is the only place your keys live, it's also the only thing standing
+between you and re-issuing all of them. Take a backup:
+
+```bash
+omakeys export --encrypt keys.gpg      # gpg symmetric, prompts for a passphrase
+```
+
+The file is written with mode 600 and the plaintext never touches disk — it
+goes straight from the keyring into gpg over a pipe. Restoring on the new
+machine is the mirror image:
+
+```bash
+gpg -d keys.gpg | omakeys import -
+```
+
+`omakeys export` on its own prints `NAME=VALUE` to stdout instead, after a
+confirmation, for when you'd rather pipe it somewhere yourself. That output is
+plaintext — if you redirect it to a file, `shred -u` the file when you're done.
+Keys whose name contains `=` or whose value spans multiple lines are skipped
+with a warning rather than written out in a form import would misread.
+
 ## How it works
 
 - Keys live in the gnome-keyring login collection as generic secrets with
@@ -98,6 +146,11 @@ plaintext keys. Never paste key values into AI chats or other remote services
 - Copying pipes `secret-tool lookup` straight into
   `wl-copy --trim-newline --sensitive`, so the value never touches a file,
   an argv, or the clipboard history.
+- Adding a key from the selector is the one path that carries a value inward.
+  It goes to `secret-tool store` over stdin — never argv, which any process on
+  the machine can read out of `/proc` — and the field is cleared the moment the
+  form closes. It does still pass through the shell process on the way, which
+  copying never does; the CLI's `omakeys add` avoids even that if you'd rather.
 
 ### Threat model, honestly
 
