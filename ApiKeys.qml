@@ -154,7 +154,7 @@ Item {
     root.opened = false
     Quickshell.execDetached(["bash", "-c",
       'secret-tool lookup service api-keys name "$1" | wl-copy --trim-newline --sensitive',
-      "apikeys-copy", row.name])
+      "omakeys-copy", row.name])
   }
 
   function pasteIndex(index) {
@@ -163,7 +163,7 @@ Item {
     root.opened = false
     Quickshell.execDetached(["bash", "-c",
       'secret-tool lookup service api-keys name "$1" | wl-copy --trim-newline --sensitive && sleep 0.15 && wtype -M shift -k Insert -m shift',
-      "apikeys-paste", row.name])
+      "omakeys-paste", row.name])
   }
 
   function requestDelete(index) {
@@ -218,7 +218,7 @@ Item {
     visible: root.opened
     anchors { top: true; bottom: true; left: true; right: true }
     color: "transparent"
-    WlrLayershell.namespace: "omarchy-apikeys"
+    WlrLayershell.namespace: "omakeys"
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
     exclusionMode: ExclusionMode.Ignore
@@ -428,7 +428,7 @@ Item {
             }
 
             Text {
-              text: root.entries.length === 0 ? "No API keys yet — add one with:  apikeys add <name>" : "No matches for “" + root.filterText + "”"
+              text: root.entries.length === 0 ? "No API keys yet — add one with:  omakeys add <name>" : "No matches for “" + root.filterText + "”"
               color: root.foreground
               opacity: 0.7
               font.family: root.fontFamily

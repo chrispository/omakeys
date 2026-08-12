@@ -7,7 +7,7 @@ set -euo pipefail
 
 PLUGIN_ID=chrispository.omakeys
 PLUGIN_DEST="$HOME/.config/omarchy/plugins/$PLUGIN_ID"
-BIN_DEST="$HOME/.local/bin/apikeys"
+BIN_DEST="$HOME/.local/bin/omakeys"
 BINDINGS="$HOME/.config/hypr/bindings.lua"
 
 omarchy plugin disable "$PLUGIN_ID" 2>/dev/null || true

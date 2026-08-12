@@ -22,7 +22,7 @@ cd omakeys
 ```
 
 The installer copies the plugin into `~/.config/omarchy/plugins/`, installs
-the `apikeys` CLI to `~/.local/bin/`, enables the plugin, and binds
+the `omakeys` CLI to `~/.local/bin/`, enables the plugin, and binds
 **Super + A** (skipped with instructions if you already have that key bound).
 
 Dependencies (`libsecret`, `wl-clipboard`, `wtype`) ship with Omarchy by
@@ -61,13 +61,13 @@ that's the plugin's id, not part of the shortcut — so only the key chord in
 ### The CLI
 
 ```bash
-apikeys add <name>       # store a key (hidden prompt, or pipe the value in)
-apikeys list             # list key names
-apikeys copy <name>      # copy to clipboard
-apikeys show <name>      # print to stdout
-apikeys rm <name>        # delete
-apikeys mv <old> <new>   # rename (prompts before overwriting an existing name)
-apikeys import <file>    # bulk import, then offers to shred the file
+omakeys add <name>       # store a key (hidden prompt, or pipe the value in)
+omakeys list             # list key names
+omakeys copy <name>      # copy to clipboard
+omakeys show <name>      # print to stdout
+omakeys rm <name>        # delete
+omakeys mv <old> <new>   # rename (prompts before overwriting an existing name)
+omakeys import <file>    # bulk import, then offers to shred the file
 ```
 
 ### Bulk import
@@ -81,7 +81,7 @@ anthropic	sk-ant-xyz...
 ```
 
 ```bash
-apikeys import ./mykeys.txt
+omakeys import ./mykeys.txt
 ```
 
 After a successful import it offers to `shred -u` the file, since it holds

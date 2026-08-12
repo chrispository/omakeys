@@ -11,13 +11,13 @@ SERVICE=api-keys
 usage() {
   cat <<'EOF'
 Usage:
-  apikeys add <name>       Store a key (prompts for the value, or pipe it in)
-  apikeys list             List key names
-  apikeys copy <name>      Copy a key to the clipboard (sensitive, trimmed)
-  apikeys show <name>      Print a key to stdout
-  apikeys rm <name>        Delete a key
-  apikeys mv <old> <new>   Rename a key
-  apikeys import <file>    Bulk import "NAME=VALUE" or "NAME<whitespace>VALUE"
+  omakeys add <name>       Store a key (prompts for the value, or pipe it in)
+  omakeys list             List key names
+  omakeys copy <name>      Copy a key to the clipboard (sensitive, trimmed)
+  omakeys show <name>      Print a key to stdout
+  omakeys rm <name>        Delete a key
+  omakeys mv <old> <new>   Rename a key
+  omakeys import <file>    Bulk import "NAME=VALUE" or "NAME<whitespace>VALUE"
                            lines (blank lines and #comments skipped), then
                            offer to shred the file
 EOF
@@ -103,7 +103,7 @@ rm)
   ;;
 mv)
   old=${2:-} new=${3:-}
-  [[ -n $old && -n $new ]] || { echo "Usage: apikeys mv <old> <new>" >&2; exit 1; }
+  [[ -n $old && -n $new ]] || { echo "Usage: omakeys mv <old> <new>" >&2; exit 1; }
 
   resolved_old=$(resolve_name "$old") || { echo "No such key: '$old'" >&2; exit 1; }
   [[ $resolved_old != "$new" ]] || { echo "Names are identical; nothing to do." >&2; exit 1; }

@@ -1,14 +1,14 @@
 #!/bin/bash
 
 # Installs OmaKeys: the chrispository.omakeys Quickshell overlay plugin,
-# the `apikeys` CLI, and a SUPER + A keybinding.
+# the `omakeys` CLI, and a SUPER + A keybinding.
 
 set -euo pipefail
 
 PLUGIN_ID=chrispository.omakeys
 REPO_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 PLUGIN_DEST="$HOME/.config/omarchy/plugins/$PLUGIN_ID"
-BIN_DEST="$HOME/.local/bin/apikeys"
+BIN_DEST="$HOME/.local/bin/omakeys"
 BINDINGS="$HOME/.config/hypr/bindings.lua"
 
 fail() {
@@ -36,7 +36,7 @@ mkdir -p "$PLUGIN_DEST"
 cp "$REPO_DIR/ApiKeys.qml" "$REPO_DIR/manifest.json" "$PLUGIN_DEST/"
 
 echo "Installing CLI to $BIN_DEST"
-install -Dm755 "$REPO_DIR/bin/apikeys" "$BIN_DEST"
+install -Dm755 "$REPO_DIR/bin/omakeys" "$BIN_DEST"
 
 # A newly-copied plugin id is invisible to the running shell until it
 # rescans; only needed the first time a given id is installed.
@@ -51,7 +51,7 @@ if [[ -f $BINDINGS ]] && ! grep -q "$PLUGIN_ID" "$BINDINGS"; then
     echo "SUPER + A is already bound; skipping keybinding. Add your own to $BINDINGS:"
     echo "  o.bind(\"SUPER + <key>\", \"OmaKeys\", \"omarchy-shell shell toggle $PLUGIN_ID\")"
   else
-    printf '\n-- OmaKeys API key selector (%s plugin; manage keys with `apikeys` CLI)\no.bind("SUPER + A", "OmaKeys", "omarchy-shell shell toggle %s")\n' "$PLUGIN_ID" "$PLUGIN_ID" >>"$BINDINGS"
+    printf '\n-- OmaKeys API key selector (%s plugin; manage keys with `omakeys` CLI)\no.bind("SUPER + A", "OmaKeys", "omarchy-shell shell toggle %s")\n' "$PLUGIN_ID" "$PLUGIN_ID" >>"$BINDINGS"
     echo "Bound SUPER + A in $BINDINGS"
     if command -v hyprctl >/dev/null; then
       hyprctl reload >/dev/null
@@ -63,5 +63,5 @@ fi
 
 echo
 echo "Done. Press SUPER + A to open the selector."
-echo "Add your first key:  apikeys add <name>"
-echo "Bulk import:         apikeys import <file>   (see README)"
+echo "Add your first key:  omakeys add <name>"
+echo "Bulk import:         omakeys import <file>   (see README)"
