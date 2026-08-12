@@ -1,0 +1,24 @@
+#!/bin/bash
+
+# Removes the omarchy-apikeys plugin, CLI, and keybinding.
+# Keys stored in gnome-keyring are left untouched.
+
+set -euo pipefail
+
+PLUGIN_ID=chris.apikeys
+PLUGIN_DEST="$HOME/.config/omarchy/plugins/$PLUGIN_ID"
+BIN_DEST="$HOME/.local/bin/apikeys"
+BINDINGS="$HOME/.config/hypr/bindings.lua"
+
+omarchy plugin disable "$PLUGIN_ID" 2>/dev/null || true
+rm -rf "$PLUGIN_DEST"
+rm -f "$BIN_DEST"
+
+if [[ -f $BINDINGS ]] && grep -q "$PLUGIN_ID" "$BINDINGS"; then
+  sed -i "/$PLUGIN_ID/d" "$BINDINGS"
+  command -v hyprctl >/dev/null && hyprctl reload >/dev/null || true
+  echo "Removed keybinding lines mentioning $PLUGIN_ID from $BINDINGS"
+fi
+
+echo "Uninstalled. Your keys are still in the keyring; to wipe them:"
+echo '  secret-tool search --all service api-keys 2>&1 | sed -n "s/^attribute.name = //p" | while read -r n; do secret-tool clear service api-keys name "$n"; done'

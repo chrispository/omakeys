@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "chris.apikeys",
+  "name": "API Keys",
+  "version": "1.0.0",
+  "author": "Chris",
+  "description": "Filterable API key selector backed by gnome-keyring",
+  "kinds": [
+    "overlay"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "overlay": "ApiKeys.qml"
+  }
+}
