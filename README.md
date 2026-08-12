@@ -71,7 +71,7 @@ opens with two fields:
 
 | Field | |
 | --- | --- |
-| **Name** | What you'll search for later, e.g. `OPENAI` |
+| **Name** | What you'll search for later, e.g. `OpenAI` |
 | **API key** | Masked as you type |
 
 **Tab** and **Shift + Tab** move between the two fields, **Enter** saves from
@@ -93,7 +93,9 @@ omakeys show <name>      # print to stdout
 omakeys rm <name>        # delete
 omakeys mv <old> <new>   # rename (prompts before overwriting an existing name)
 omakeys import <file>    # bulk import, then offers to shred the file
+omakeys import -         # same, reading stdin
 omakeys export           # print every key as NAME=VALUE on stdout
+omakeys export --encrypt <file>   # write a gpg passphrase-encrypted backup
 ```
 
 ### Bulk import
@@ -142,8 +144,8 @@ with a warning rather than written out in a form import would misread.
 - Keys live in the gnome-keyring login collection as generic secrets with
   attributes `service=api-keys`, `name=<key name>`. Encrypted at rest,
   unlocked automatically with your login.
-- The overlay enumerates names via `secret-tool search` (names only —
-  secret values are never loaded into the shell process).
+- The overlay enumerates names via `secret-tool search` — listing loads names
+  only, never a secret value.
 - Copying pipes `secret-tool lookup` straight into
   `wl-copy --trim-newline --sensitive`, so the value never touches a file,
   an argv, or the clipboard history.
