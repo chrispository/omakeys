@@ -64,9 +64,10 @@ Press **Super + A**, type to filter, **Enter** copies the highlighted key
 (**Shift + Enter** pastes it straight into the focused window, **Delete**
 removes it).
 
-The first row is always **＋ Add new key**, so you never need to drop to a
-terminal to store one. Select it — or press **Ctrl + N** from anywhere in the
-list — and a small form opens with two fields:
+The first row is always **＋ Add Key**, and it's what's selected when the
+selector opens, so you never need to drop to a terminal to store one. Press
+Enter on it — or **Ctrl + N** from anywhere in the list — and a small form
+opens with two fields:
 
 | Field | |
 | --- | --- |
@@ -78,9 +79,9 @@ either one, **Esc** cancels. Typing a name that already exists asks once
 before replacing it, so re-adding a rotated key is a deliberate act rather
 than an accident.
 
-The cursor still rests on the first *key* rather than the add row, so the
-muscle-memory path — Super + A, type, Enter — copies exactly like it did
-before.
+Once you start typing a filter the cursor moves to the first matching key, so
+the muscle-memory path — Super + A, type, Enter — still copies rather than
+opening the form.
 
 ### The CLI
 

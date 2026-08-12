@@ -104,10 +104,11 @@ Item {
     return ""
   }
 
-  // Row 0 is always "Add new key", so the resting cursor is the first real
-  // key below it: type-to-filter then Enter still copies, the way it did
-  // before the add row existed.
+  // The add row rests selected when the list is untouched. Once a filter
+  // narrows things down the cursor moves to the first match instead, so
+  // type-then-Enter copies a key rather than opening the add form.
   function defaultIndex() {
+    if (!root.filterText) return 0
     return displayModel.count > 1 ? 1 : 0
   }
 
@@ -115,7 +116,7 @@ Item {
     var filter = root.filterText.toLowerCase()
 
     displayModel.clear()
-    displayModel.append({ kind: "add", name: "Add new key…" })
+    displayModel.append({ kind: "add", name: "Add Key" })
     for (var i = 0; i < root.entries.length; i++) {
       var entry = root.entries[i]
       if (filter && entry.name.toLowerCase().indexOf(filter) === -1) continue
@@ -507,16 +508,6 @@ Item {
                   width: parent.width
                   height: Style.space(34)
 
-                  Text {
-                    anchors.left: parent.left
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "Tab switches fields"
-                    color: root.foreground
-                    opacity: 0.5
-                    font.family: root.fontFamily
-                    font.pixelSize: Style.font.caption
-                  }
-
                   Row {
                     anchors.right: parent.right
                     spacing: Style.space(10)
@@ -699,7 +690,7 @@ Item {
             }
 
             Text {
-              text: root.entries.length === 0 ? "No API keys yet — pick “Add new key” above" : "No matches for “" + root.filterText + "”"
+              text: root.entries.length === 0 ? "No API keys yet — pick “Add Key” above" : "No matches for “" + root.filterText + "”"
               color: root.foreground
               opacity: 0.7
               font.family: root.fontFamily
