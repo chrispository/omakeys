@@ -1,7 +1,7 @@
 # omakeys
 
 <p align="center">
-  <img src="assets/screenshot.png" alt="omakeys selector open on the desktop, showing a search field over a filterable list of API key names" width="820">
+  <img src="assets/omakeys-selector.png" alt="omakeys selector open on the desktop, showing a search field over a filterable list of API key names" width="820">
 </p>
 
 A clipboard-history-style API key selector for [Omarchy](https://omarchy.org).
