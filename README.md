@@ -73,6 +73,7 @@ apikeys list             # list key names
 apikeys copy <name>      # copy to clipboard
 apikeys show <name>      # print to stdout
 apikeys rm <name>        # delete
+apikeys mv <old> <new>   # rename (prompts before overwriting an existing name)
 apikeys import <file>    # bulk import, then offers to shred the file
 ```
 

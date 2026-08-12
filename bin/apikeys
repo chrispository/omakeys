@@ -16,6 +16,7 @@ Usage:
   apikeys copy <name>      Copy a key to the clipboard (sensitive, trimmed)
   apikeys show <name>      Print a key to stdout
   apikeys rm <name>        Delete a key
+  apikeys mv <old> <new>   Rename a key
   apikeys import <file>    Bulk import "NAME=VALUE" or "NAME<whitespace>VALUE"
                            lines (blank lines and #comments skipped), then
                            offer to shred the file
@@ -66,6 +67,25 @@ rm)
   require_name "${2:-}"
   secret-tool clear service "$SERVICE" name "$2"
   echo "Deleted '$2'."
+  ;;
+mv)
+  old=${2:-} new=${3:-}
+  [[ -n $old && -n $new ]] || { echo "Usage: apikeys mv <old> <new>" >&2; exit 1; }
+  [[ $old != "$new" ]] || { echo "Names are identical; nothing to do." >&2; exit 1; }
+
+  # secret-tool has no rename primitive: read the value under the old name,
+  # store it under the new one, then clear the old entry.
+  value=$(secret-tool lookup service "$SERVICE" name "$old" 2>/dev/null) || true
+  [[ -n $value ]] || { echo "No such key: '$old'" >&2; exit 1; }
+
+  if secret-tool lookup service "$SERVICE" name "$new" >/dev/null 2>&1; then
+    read -rp "'$new' already exists — overwrite it? [y/N] " answer
+    [[ $answer == [Yy]* ]] || { echo "Aborted." >&2; exit 1; }
+  fi
+
+  store_key "$new" "$value"
+  secret-tool clear service "$SERVICE" name "$old"
+  echo "Renamed '$old' -> '$new'."
   ;;
 import)
   file=${2:-}
