@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# Removes the omarchy-apikeys plugin, CLI, and keybinding.
+# Removes the OmaKeys plugin, CLI, and keybinding.
 # Keys stored in gnome-keyring are left untouched.
 
 set -euo pipefail
 
-PLUGIN_ID=chris.apikeys
+PLUGIN_ID=chrispository.omakeys
 PLUGIN_DEST="$HOME/.config/omarchy/plugins/$PLUGIN_ID"
 BIN_DEST="$HOME/.local/bin/apikeys"
 BINDINGS="$HOME/.config/hypr/bindings.lua"

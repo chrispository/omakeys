@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Manage API keys stored in gnome-keyring under attributes service=api-keys,
-# name=<key name>. The Super+A selector (chris.apikeys shell plugin) reads
-# the same entries.
+# name=<key name>. The Super+A selector (chrispository.omakeys shell plugin)
+# reads the same entries.
 
 set -euo pipefail
 

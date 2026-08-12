@@ -33,7 +33,7 @@ default; the installer adds any that are missing via `omarchy pkg add`.
 The install script adds this line to `~/.config/hypr/bindings.lua`:
 
 ```lua
-o.bind("SUPER + A", "API keys", "omarchy-shell shell toggle chris.apikeys")
+o.bind("SUPER + A", "OmaKeys", "omarchy-shell shell toggle chrispository.omakeys")
 ```
 
 To rebind it, edit that line — change `"SUPER + A"` to whatever chord you
@@ -48,13 +48,13 @@ above your new binding:
 
 ```lua
 hl.unbind("SUPER + SHIFT + K")
-o.bind("SUPER + SHIFT + K", "API keys", "omarchy-shell shell toggle chris.apikeys")
+o.bind("SUPER + SHIFT + K", "OmaKeys", "omarchy-shell shell toggle chrispository.omakeys")
 ```
 
 Hyprland auto-reloads on save; run `hyprctl reload` and `hyprctl configerrors`
-to confirm it applied cleanly. The `chris.apikeys` name is fixed — that's the
-plugin's id, not part of the shortcut — so only the key chord in `o.bind(...)`
-needs to change.
+to confirm it applied cleanly. The `chrispository.omakeys` name is fixed —
+that's the plugin's id, not part of the shortcut — so only the key chord in
+`o.bind(...)` needs to change.
 
 ## Use
 
