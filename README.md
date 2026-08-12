@@ -58,17 +58,6 @@ needs to change.
 
 ## Use
 
-### The selector (Super + A)
-
-| Key | Action |
-|-----|--------|
-| type anything | Filter key names |
-| Up/Down, PageUp/PageDown, Home/End | Move selection |
-| Enter (or click) | Copy key to clipboard |
-| Shift+Enter | Copy + paste into the focused window |
-| Del | Delete the selected key (with confirm) |
-| Esc | Clear filter, then close |
-
 ### The CLI
 
 ```bash
