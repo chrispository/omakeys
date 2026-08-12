@@ -1,5 +1,9 @@
 # omakeys
 
+<p align="center">
+  <img src="assets/screenshot.png" alt="omakeys selector showing a filterable list of API key names" width="480">
+</p>
+
 A clipboard-history-style API key selector for [Omarchy](https://omarchy.org).
 Press **Super + A**, type to filter your key names, hit Enter — the key is on
 your clipboard. Keys are stored encrypted in gnome-keyring, never in plaintext

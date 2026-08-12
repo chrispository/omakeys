@@ -33,6 +33,36 @@ store_key() {
   printf '%s' "$value" | secret-tool store --label="$name" service "$SERVICE" name "$name"
 }
 
+# gnome-keyring attribute matching is a literal string comparison (not a
+# security boundary, just exact-match), so "deepseek_1" won't find a key
+# stored as "DEEPSEEK_1". Resolve case-insensitively against the real stored
+# names so the CLI doesn't force users to type the exact original casing.
+resolve_name() {
+  local query=$1
+  if secret-tool lookup service "$SERVICE" name "$query" >/dev/null 2>&1; then
+    printf '%s' "$query"
+    return 0
+  fi
+
+  local all matches=()
+  all=$(secret-tool search --all service "$SERVICE" 2>&1 | sed -n 's/^attribute\.name = //p')
+  while IFS= read -r n; do
+    [[ -n $n && ${n,,} == "${query,,}" ]] && matches+=("$n")
+  done <<<"$all"
+
+  case ${#matches[@]} in
+  0) return 1 ;;
+  1)
+    printf '%s' "${matches[0]}"
+    return 0
+    ;;
+  *)
+    echo "'$query' matches multiple keys differing only by case: ${matches[*]}" >&2
+    return 2
+    ;;
+  esac
+}
+
 cmd=${1:-}
 case "$cmd" in
 add)
@@ -55,37 +85,48 @@ list)
   ;;
 copy)
   require_name "${2:-}"
-  secret-tool lookup service "$SERVICE" name "$2" | wl-copy --trim-newline --sensitive
-  echo "Copied '$2' to clipboard."
+  resolved=$(resolve_name "$2") || { echo "No such key: '$2'" >&2; exit 1; }
+  secret-tool lookup service "$SERVICE" name "$resolved" | wl-copy --trim-newline --sensitive
+  echo "Copied '$resolved' to clipboard."
   ;;
 show)
   require_name "${2:-}"
-  secret-tool lookup service "$SERVICE" name "$2"
+  resolved=$(resolve_name "$2") || { echo "No such key: '$2'" >&2; exit 1; }
+  secret-tool lookup service "$SERVICE" name "$resolved"
   echo
   ;;
 rm)
   require_name "${2:-}"
-  secret-tool clear service "$SERVICE" name "$2"
-  echo "Deleted '$2'."
+  resolved=$(resolve_name "$2") || { echo "No such key: '$2'" >&2; exit 1; }
+  secret-tool clear service "$SERVICE" name "$resolved"
+  echo "Deleted '$resolved'."
   ;;
 mv)
   old=${2:-} new=${3:-}
   [[ -n $old && -n $new ]] || { echo "Usage: apikeys mv <old> <new>" >&2; exit 1; }
-  [[ $old != "$new" ]] || { echo "Names are identical; nothing to do." >&2; exit 1; }
+
+  resolved_old=$(resolve_name "$old") || { echo "No such key: '$old'" >&2; exit 1; }
+  [[ $resolved_old != "$new" ]] || { echo "Names are identical; nothing to do." >&2; exit 1; }
+  value=$(secret-tool lookup service "$SERVICE" name "$resolved_old")
 
   # secret-tool has no rename primitive: read the value under the old name,
-  # store it under the new one, then clear the old entry.
-  value=$(secret-tool lookup service "$SERVICE" name "$old" 2>/dev/null) || true
-  [[ -n $value ]] || { echo "No such key: '$old'" >&2; exit 1; }
-
-  if secret-tool lookup service "$SERVICE" name "$new" >/dev/null 2>&1; then
-    read -rp "'$new' already exists — overwrite it? [y/N] " answer
+  # store it under the new one, then clear the old entry. A resolve_name hit
+  # that's just the entry being renamed (a pure case change) isn't a real
+  # collision, so it skips the prompt; an ambiguous hit (multiple existing
+  # case-variants of the target name) refuses to guess rather than silently
+  # creating a third variant.
+  new_status=0
+  resolved_new=$(resolve_name "$new") || new_status=$?
+  if [[ $new_status -eq 2 ]]; then
+    exit 1
+  elif [[ $new_status -eq 0 && $resolved_new != "$resolved_old" ]]; then
+    read -rp "'$resolved_new' already exists — overwrite it? [y/N] " answer
     [[ $answer == [Yy]* ]] || { echo "Aborted." >&2; exit 1; }
   fi
 
   store_key "$new" "$value"
-  secret-tool clear service "$SERVICE" name "$old"
-  echo "Renamed '$old' -> '$new'."
+  secret-tool clear service "$SERVICE" name "$resolved_old"
+  echo "Renamed '$resolved_old' -> '$new'."
   ;;
 import)
   file=${2:-}
