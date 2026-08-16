@@ -16,8 +16,7 @@ clipboard manager — same look, same theming, same type-to-filter feel.
 ## Install
 
 ```bash
-omarchy plugin add https://github.com/chrispository/omakeys.git --enable
-~/.config/omarchy/plugins/chrispository.omakeys/setup
+omarchy plugin add https://github.com/chrispository/omakeys.git --enable && ~/.config/omarchy/plugins/chrispository.omakeys/setup
 ```
 
 The first line installs and enables the overlay. The second finishes the
