@@ -1,7 +1,7 @@
 # omakeys
 
 <p align="center">
-  <img src="assets/key-selector.png" alt="omakeys selector open on the desktop, showing a search field, a selected Add Key row, and a filterable list of API key names" width="820">
+  <img src="preview.png" alt="omakeys selector open on the desktop, showing a search field, a selected Add Key row, and a filterable list of API key names" width="820">
 </p>
 
 A clipboard-history-style API key selector for [Omarchy](https://omarchy.org).
@@ -16,21 +16,29 @@ clipboard manager — same look, same theming, same type-to-filter feel.
 ## Install
 
 ```bash
+omarchy plugin add https://github.com/chrispository/omakeys.git --enable
+~/.config/omarchy/plugins/chrispository.omakeys/setup
+```
+
+The first line installs and enables the overlay. The second finishes the
+job: it installs the `omakeys` CLI to `~/.local/bin/` and binds
+**Super + A** (skipped with instructions if you already have that key
+bound).
+
+Or from a git clone, which does both steps at once:
+
+```bash
 git clone https://github.com/chrispository/omakeys.git
 cd omakeys
 ./install
 ```
 
-The installer copies the plugin into `~/.config/omarchy/plugins/`, installs
-the `omakeys` CLI to `~/.local/bin/`, enables the plugin, and binds
-**Super + A** (skipped with instructions if you already have that key bound).
-
 Dependencies (`libsecret`, `wl-clipboard`, `wtype`) ship with Omarchy by
-default; the installer adds any that are missing via `omarchy pkg add`.
+default; the setup script adds any that are missing via `omarchy pkg add`.
 
 ## Changing the keybinding
 
-The install script adds this line to `~/.config/hypr/bindings.lua`:
+The setup script adds this line to `~/.config/hypr/bindings.lua`:
 
 ```lua
 o.bind("SUPER + A", "OmaKeys", "omarchy-shell shell toggle chrispository.omakeys")
@@ -165,11 +173,14 @@ pinentry instead of this tool.
 ## Uninstall
 
 ```bash
-./uninstall
+~/.config/omarchy/plugins/chrispository.omakeys/uninstall
 ```
 
-Removes the plugin, CLI, and keybinding. Stored keys are left in the keyring
-(the script prints a one-liner to wipe them if you want that too).
+(or `./uninstall` from a git clone). Removes the plugin, CLI, and
+keybinding — equivalent to `omarchy plugin remove chrispository.omakeys`
+plus the CLI and keybinding it doesn't know about. Stored keys are left in
+the keyring (the script prints a one-liner to wipe them if you want that
+too).
 
 ## License
 

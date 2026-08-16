@@ -4,6 +4,7 @@
   "name": "OmaKeys",
   "version": "1.0.0",
   "author": "chrispository",
+  "license": "MIT",
   "description": "Clipboard-history style API key selector.",
   "kinds": [
     "overlay"

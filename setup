@@ -1,0 +1,75 @@
+#!/bin/bash
+
+# Finishes an OmaKeys install: dependencies, the `omakeys` CLI, plugin
+# enablement, and a SUPER + A keybinding. Safe to re-run.
+#
+# After `omarchy plugin add` (which clones this repo into the plugins dir):
+#   ~/.config/omarchy/plugins/chrispository.omakeys/setup
+#
+# From a git clone it also copies the plugin files into place first, so it
+# covers the whole ./install flow on its own.
+
+set -euo pipefail
+
+PLUGIN_ID=chrispository.omakeys
+REPO_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+PLUGIN_DEST="$HOME/.config/omarchy/plugins/$PLUGIN_ID"
+BIN_DEST="$HOME/.local/bin/omakeys"
+BINDINGS="$HOME/.config/hypr/bindings.lua"
+
+fail() {
+  echo "error: $*" >&2
+  exit 1
+}
+
+command -v omarchy-shell >/dev/null || fail "omarchy-shell not found — this installer is for Omarchy systems."
+
+missing=()
+for dep in secret-tool wl-copy wtype; do
+  command -v "$dep" >/dev/null || missing+=("$dep")
+done
+if ((${#missing[@]})); then
+  echo "Installing missing dependencies: ${missing[*]}"
+  omarchy pkg add libsecret wl-clipboard wtype
+fi
+
+# -f because pgrep -x can't match names longer than 15 chars
+pgrep -f '(^|/)gnome-keyring-daemon( |$)' >/dev/null ||
+  echo "warning: gnome-keyring-daemon is not running; the keyring must be available for storage to work." >&2
+
+if [[ $REPO_DIR != "$PLUGIN_DEST" && ! -f $PLUGIN_DEST/manifest.json ]]; then
+  echo "Installing plugin to $PLUGIN_DEST"
+  mkdir -p "$PLUGIN_DEST"
+  cp "$REPO_DIR/ApiKeys.qml" "$REPO_DIR/manifest.json" "$PLUGIN_DEST/"
+fi
+
+echo "Installing CLI to $BIN_DEST"
+install -Dm755 "$REPO_DIR/bin/omakeys" "$BIN_DEST"
+
+# A newly-copied plugin id is invisible to the running shell until it
+# rescans; only needed the first time a given id is installed.
+omarchy-shell -q shell rescanPlugins
+
+if ! omarchy plugin list 2>/dev/null | awk -v id="$PLUGIN_ID" '$1 == id && $2 == "enabled" { found = 1 } END { exit !found }'; then
+  omarchy plugin enable "$PLUGIN_ID"
+fi
+
+if [[ -f $BINDINGS ]] && ! grep -q "$PLUGIN_ID" "$BINDINGS"; then
+  if omarchy menu keybindings --print 2>/dev/null | grep -q '^SUPER + A  '; then
+    echo "SUPER + A is already bound; skipping keybinding. Add your own to $BINDINGS:"
+    echo "  o.bind(\"SUPER + <key>\", \"OmaKeys\", \"omarchy-shell shell toggle $PLUGIN_ID\")"
+  else
+    printf '\n-- OmaKeys API key selector (%s plugin; manage keys with `omakeys` CLI)\no.bind("SUPER + A", "OmaKeys", "omarchy-shell shell toggle %s")\n' "$PLUGIN_ID" "$PLUGIN_ID" >>"$BINDINGS"
+    echo "Bound SUPER + A in $BINDINGS"
+    if command -v hyprctl >/dev/null; then
+      hyprctl reload >/dev/null
+      errors=$(hyprctl configerrors)
+      [[ $errors == *"no errors"* || -z $errors ]] || echo "warning: hyprctl configerrors reported: $errors" >&2
+    fi
+  fi
+fi
+
+echo
+echo "Done. Press SUPER + A to open the selector."
+echo "Add your first key:  omakeys add <name>"
+echo "Bulk import:         omakeys import <file>   (see README)"
