@@ -1,7 +1,7 @@
 # omakeys
 
 <p align="center">
-  <img src="preview.png" alt="omakeys selector showing a search field, a selected Add Key row, and a list of API key names" width="604">
+  <img src="https://raw.githubusercontent.com/chrispository/omakeys/247f176c412973c5c44be02c8bff889b0a01ea42/preview.png" alt="omakeys selector showing a search field, a selected Add Key row, and a list of API key names" width="604">
 </p>
 
 A clipboard-history-style API key selector for [Omarchy](https://omarchy.org).
@@ -28,7 +28,6 @@ different chord, edit the `o.bind("SUPER + A", ...)` line there.
 | --- | --- |
 | Type | Filter key names |
 | **Enter** | Copy the selected key |
-| **Shift + Enter** | Paste it into the focused window |
 | **F2** | Rename the selected key |
 | **Delete** | Delete the selected key (asks first) |
 | **Ctrl + N** | Add a key (or press Enter on **＋ Add Key**) |
