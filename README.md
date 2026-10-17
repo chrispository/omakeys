@@ -1,17 +1,13 @@
 # omakeys
 
 <p align="center">
-  <img src="preview.png" alt="omakeys selector open on the desktop, showing a search field, a selected Add Key row, and a filterable list of API key names" width="820">
+  <img src="preview.png" alt="omakeys selector showing a search field, a selected Add Key row, and a list of API key names" width="604">
 </p>
 
 A clipboard-history-style API key selector for [Omarchy](https://omarchy.org).
-Press **Super + A**, type to filter your key names, hit Enter — the key is on
-your clipboard. Keys are stored encrypted in gnome-keyring, never in plaintext
-files, and copies are marked sensitive so they stay out of Omarchy's clipboard
-history.
-
-Built as a native Omarchy shell (Quickshell) overlay, modeled on the stock
-clipboard manager — same look, same theming, same type-to-filter feel.
+Press **Super + A**, type to filter, hit Enter — the key is on your clipboard.
+Keys are stored encrypted in gnome-keyring, and copies are marked sensitive so
+they stay out of clipboard history.
 
 ## Install
 
@@ -19,80 +15,30 @@ clipboard manager — same look, same theming, same type-to-filter feel.
 omarchy plugin add https://github.com/chrispository/omakeys.git --enable && ~/.config/omarchy/plugins/chrispository.omakeys/setup
 ```
 
-The first line installs and enables the overlay. The second finishes the
-job: it installs the `omakeys` CLI to `~/.local/bin/` and binds
-**Super + A** (skipped with instructions if you already have that key
-bound).
+Or from a clone: `git clone https://github.com/chrispository/omakeys.git && cd omakeys && ./install`.
 
-Or from a git clone, which does both steps at once:
-
-```bash
-git clone https://github.com/chrispository/omakeys.git
-cd omakeys
-./install
-```
-
-Dependencies (`libsecret`, `wl-clipboard`, `wtype`) ship with Omarchy by
-default; the setup script adds any that are missing via `omarchy pkg add`.
-
-## Changing the keybinding
-
-The setup script adds this line to `~/.config/hypr/bindings.lua`:
-
-```lua
-o.bind("SUPER + A", "OmaKeys", "omarchy-shell shell toggle chrispository.omakeys")
-```
-
-To rebind it, edit that line — change `"SUPER + A"` to whatever chord you
-want, e.g. `"SUPER + SHIFT + K"`. Check for conflicts first:
-
-```bash
-omarchy menu keybindings --print | grep -i 'SUPER + SHIFT + K'
-```
-
-If it's already bound to something else, unbind it first by adding a line
-above your new binding:
-
-```lua
-hl.unbind("SUPER + SHIFT + K")
-o.bind("SUPER + SHIFT + K", "OmaKeys", "omarchy-shell shell toggle chrispository.omakeys")
-```
-
-Hyprland auto-reloads on save; run `hyprctl reload` and `hyprctl configerrors`
-to confirm it applied cleanly. The `chrispository.omakeys` name is fixed —
-that's the plugin's id, not part of the shortcut — so only the key chord in
-`o.bind(...)` needs to change.
+Setup installs the `omakeys` CLI to `~/.local/bin/`, adds any missing
+dependencies (`libsecret`, `wl-clipboard`, `wtype`), and binds **Super + A**
+in `~/.config/hypr/bindings.lua` unless that chord is taken. To use a
+different chord, edit the `o.bind("SUPER + A", ...)` line there.
 
 ## Use
 
-### The selector
-
-Press **Super + A**, type to filter, **Enter** copies the highlighted key
-(**Shift + Enter** pastes it straight into the focused window, **F2**
-renames it, **Delete** removes it). Renaming onto a name that's already
-taken asks before replacing that key.
-
-The first row is always **＋ Add Key**, and it's what's selected when the
-selector opens, so you never need to drop to a terminal to store one. Press
-Enter on it — or **Ctrl + N** from anywhere in the list — and a small form
-opens with two fields:
-
-| Field | |
+| Key | Action |
 | --- | --- |
-| **Name** | What you'll search for later, e.g. `OpenAI` |
-| **API key** | Masked as you type |
+| Type | Filter key names |
+| **Enter** | Copy the selected key |
+| **Shift + Enter** | Paste it into the focused window |
+| **F2** | Rename the selected key |
+| **Delete** | Delete the selected key (asks first) |
+| **Ctrl + N** | Add a key (or press Enter on **＋ Add Key**) |
+| **Esc** | Clear the filter, then close |
 
-**Tab** and **Shift + Tab** move between the two fields, **Enter** saves from
-either one, **Esc** cancels. Saving under a name that already exists closes
-the form and asks for confirmation before replacing it (Enter again to
-replace, Esc to cancel), so re-adding a rotated key is a deliberate act
-rather than an accident.
+In the add and rename forms, **Enter** saves and **Esc** cancels. Saving or
+renaming onto a name that already exists asks before replacing it — which is
+also how you rotate a key: add it again under the same name.
 
-Once you start typing a filter the cursor moves to the first matching key, so
-the muscle-memory path — Super + A, type, Enter — still copies rather than
-opening the form.
-
-### The CLI
+### CLI
 
 ```bash
 omakeys add <name>       # store a key (hidden prompt, or pipe the value in)
@@ -100,76 +46,25 @@ omakeys list             # list key names
 omakeys copy <name>      # copy to clipboard
 omakeys show <name>      # print to stdout
 omakeys rm <name>        # delete
-omakeys mv <old> <new>   # rename (prompts before overwriting an existing name)
-omakeys import <file>    # bulk import, then offers to shred the file
-omakeys import -         # same, reading stdin
-omakeys export           # print every key as NAME=VALUE on stdout
-omakeys export --encrypt <file>   # write a gpg passphrase-encrypted backup
+omakeys mv <old> <new>   # rename
+omakeys import <file|->  # bulk import NAME=VALUE lines, then offers to shred the file
+omakeys export           # print every key as NAME=VALUE
+omakeys export --encrypt <file>   # gpg-encrypted backup
 ```
 
-### Bulk import
+Restore a backup with `gpg -d keys.gpg | omakeys import -`.
 
-One key per line, either `NAME=VALUE` or `NAME<whitespace>VALUE`
-(blank lines and `#` comments are skipped):
+## Security
 
-```
-openai=sk-abc123...
-anthropic	sk-ant-xyz...
-```
+Keys live in the gnome-keyring login collection (`service=api-keys`,
+`name=<key name>`), encrypted at rest and unlocked with your login. The
+overlay only ever lists names; copying pipes `secret-tool lookup` straight
+into `wl-copy --sensitive`, and new values go to `secret-tool store` over
+stdin, never argv.
 
-```bash
-omakeys import ./mykeys.txt
-```
-
-After a successful import it offers to `shred -u` the file, since it holds
-plaintext keys. Never paste key values into AI chats or other remote services
-— keep the import file local.
-
-### Backup and moving machines
-
-If this is the only place your keys live, it's also the only thing standing
-between you and re-issuing all of them. Take a backup:
-
-```bash
-omakeys export --encrypt keys.gpg      # gpg symmetric, prompts for a passphrase
-```
-
-The file is written with mode 600 and the plaintext never touches disk — it
-goes straight from the keyring into gpg over a pipe. Restoring on the new
-machine is the mirror image:
-
-```bash
-gpg -d keys.gpg | omakeys import -
-```
-
-`omakeys export` on its own prints `NAME=VALUE` to stdout instead, after a
-confirmation, for when you'd rather pipe it somewhere yourself. That output is
-plaintext — if you redirect it to a file, `shred -u` the file when you're done.
-Keys whose name contains `=` or whose value spans multiple lines are skipped
-with a warning rather than written out in a form import would misread.
-
-## How it works
-
-- Keys live in the gnome-keyring login collection as generic secrets with
-  attributes `service=api-keys`, `name=<key name>`. Encrypted at rest,
-  unlocked automatically with your login.
-- The overlay enumerates names via `secret-tool search` — listing loads names
-  only, never a secret value.
-- Copying pipes `secret-tool lookup` straight into
-  `wl-copy --trim-newline --sensitive`, so the value never touches a file,
-  an argv, or the clipboard history.
-- Adding a key from the selector is the one path that carries a value inward.
-  It goes to `secret-tool store` over stdin — never argv, which any process on
-  the machine can read out of `/proc` — and the field is cleared the moment the
-  form closes. It does still pass through the shell process on the way, which
-  copying never does; the CLI's `omakeys add` avoids even that if you'd rather.
-
-### Threat model, honestly
-
-The keyring is unlocked for your whole session: this protects keys on a
-stolen or backed-up disk, not from malware already running as your user.
-If you want a passphrase prompt on every use, you want `pass` with GPG
-pinentry instead of this tool.
+The keyring is unlocked for your whole session, so this protects keys on a
+stolen or backed-up disk, not from malware running as your user. If you want
+a passphrase prompt on every use, use `pass` with GPG pinentry instead.
 
 ## Uninstall
 
@@ -177,11 +72,8 @@ pinentry instead of this tool.
 ~/.config/omarchy/plugins/chrispository.omakeys/uninstall
 ```
 
-(or `./uninstall` from a git clone). Removes the plugin, CLI, and
-keybinding — equivalent to `omarchy plugin remove chrispository.omakeys`
-plus the CLI and keybinding it doesn't know about. Stored keys are left in
-the keyring (the script prints a one-liner to wipe them if you want that
-too).
+Removes the plugin, CLI, and keybinding. Stored keys stay in the keyring; the
+script prints a one-liner to wipe them too.
 
 ## License
 
