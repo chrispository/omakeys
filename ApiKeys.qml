@@ -16,7 +16,10 @@ Item {
   property string deleteTarget: ""
   property bool addFormOpen: false
   property string addNotice: ""
-  property bool addReplaceArmed: false
+  property bool replaceConfirmOpen: false
+  property string replaceTarget: ""
+  // Non-empty while the add form is doubling as the F2 rename form.
+  property string renameSource: ""
   property var entries: []
 
   // Shares the [menu] surface tokens — themes that style the menu also
@@ -50,6 +53,7 @@ Item {
 
   function close() {
     root.cancelDelete()
+    root.cancelReplace()
     root.closeAddForm()
     root.opened = false
   }
@@ -184,7 +188,7 @@ Item {
 
   function openAddForm(name) {
     root.addNotice = ""
-    root.addReplaceArmed = false
+    root.renameSource = ""
     addName.text = name !== undefined ? name : root.filterText
     addValue.text = ""
     root.addFormOpen = true
@@ -201,10 +205,26 @@ Item {
     addName.text = ""
     addValue.text = ""
     root.addNotice = ""
-    root.addReplaceArmed = false
+    root.renameSource = ""
     root.addFormOpen = false
     root.disarmPointer()
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+  }
+
+  function openRenameForm(index) {
+    if (index < 0 || index >= displayModel.count) return
+    var row = displayModel.get(index)
+    if (row.kind !== "key") return
+    root.addNotice = ""
+    root.renameSource = row.name
+    addName.text = row.name
+    addValue.text = ""
+    root.addFormOpen = true
+    root.disarmPointer()
+    Qt.callLater(function() {
+      addName.forceActiveFocus()
+      addName.selectAll()
+    })
   }
 
   function submitAdd() {
@@ -212,6 +232,10 @@ Item {
     if (!name) {
       root.addNotice = "Name is required."
       addName.forceActiveFocus()
+      return
+    }
+    if (root.renameSource) {
+      root.submitRename(name)
       return
     }
     if (!addValue.text) {
@@ -225,16 +249,54 @@ Item {
     // resolve. Reuse the stored spelling, and make the overwrite deliberate —
     // re-adding a rotated key is normal, doing it by accident isn't.
     var existing = root.existingName(name)
-    if (existing && !root.addReplaceArmed) {
-      root.addNotice = "“" + existing + "” already exists — press Enter again to replace it."
-      root.addReplaceArmed = true
-      return
-    }
-
     storeProc.pendingName = existing || name
     storeProc.pendingValue = addValue.text
-    storeProc.running = true
     root.closeAddForm()
+    if (existing) root.requestReplace(existing)
+    else storeProc.running = true
+  }
+
+  // Mirrors the CLI's mv: a match that's just the key being renamed (a pure
+  // case change) isn't a collision; any other match asks before overwriting.
+  function submitRename(name) {
+    var source = root.renameSource
+    if (name === source) {
+      root.closeAddForm()
+      return
+    }
+    var existing = root.existingName(name)
+    var collides = existing && existing !== source
+    renameProc.pendingOld = source
+    renameProc.pendingNew = collides ? existing : name
+    root.closeAddForm()
+    if (collides) root.requestReplace(existing)
+    else renameProc.running = true
+  }
+
+  function requestReplace(name) {
+    root.replaceTarget = name
+    replaceConfirm.selectedIndex = 1
+    root.replaceConfirmOpen = true
+  }
+
+  function cancelReplace() {
+    storeProc.pendingName = ""
+    storeProc.pendingValue = ""
+    renameProc.pendingOld = ""
+    renameProc.pendingNew = ""
+    root.replaceConfirmOpen = false
+    root.replaceTarget = ""
+    root.disarmPointer()
+    Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+  }
+
+  function confirmReplace() {
+    if (renameProc.pendingOld) renameProc.running = true
+    else storeProc.running = true
+    root.replaceConfirmOpen = false
+    root.replaceTarget = ""
+    root.disarmPointer()
+    Qt.callLater(function() { keyCatcher.forceActiveFocus() })
   }
 
   function copyIndex(index) {
@@ -281,6 +343,139 @@ Item {
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
   }
 
+  // The shell's ConfirmDialog with the button labels one step up
+  // (bodySmall rather than caption); the kit exposes no knob for it.
+  component KeyConfirmDialog: Item {
+    id: dialog
+
+    property bool opened: false
+    property string message: ""
+    property string cancelText: "Cancel"
+    property string confirmText: "Confirm"
+    property int selectedIndex: 1
+    property color background: Color.background
+    property color foreground: Color.foreground
+    property color scrim: Util.alpha(Color.background, 0.7)
+    property color selectedBackground: Util.alpha(Color.foreground, 0.08)
+    property color selectedText: Color.accent
+    property string fontFamily: Style.font.family
+    property int cornerRadius: Style.cornerRadius
+
+    signal canceled()
+    signal confirmed()
+
+    function handleKey(event) {
+      if (!dialog.opened) return false
+
+      if (event.key === Qt.Key_Escape) {
+        dialog.canceled()
+        return true
+      } else if (event.key === Qt.Key_Left || event.key === Qt.Key_Right || event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) {
+        dialog.selectedIndex = dialog.selectedIndex === 0 ? 1 : 0
+        return true
+      } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+        if (dialog.selectedIndex === 0) dialog.canceled()
+        else dialog.confirmed()
+        return true
+      }
+
+      return false
+    }
+
+    visible: opened
+
+    Rectangle {
+      anchors.fill: parent
+      color: dialog.scrim
+
+      MouseArea { anchors.fill: parent; onClicked: dialog.canceled() }
+
+      BorderSurface {
+        id: card
+        width: Math.min(parent.width - Style.space(32), Style.space(370))
+        // Grows with the wrapped message so narrow hosts (like the menu card)
+        // don't squeeze the text into the buttons.
+        height: card.contentTopInset + card.contentBottomInset + messageText.implicitHeight + Style.space(20) + Style.space(34)
+        anchors.centerIn: parent
+        color: dialog.background
+        borderSpec: Border.flat(dialog.selectedText, Style.normalBorderWidth)
+        padding: Style.space(18)
+        radius: dialog.cornerRadius
+
+        MouseArea { anchors.fill: parent; onClicked: {} }
+
+        Item {
+          anchors.fill: parent
+          anchors.topMargin: card.contentTopInset
+          anchors.rightMargin: card.contentRightInset
+          anchors.bottomMargin: card.contentBottomInset
+          anchors.leftMargin: card.contentLeftInset
+
+          Text {
+            id: messageText
+            textFormat: Text.PlainText
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            text: dialog.message
+            color: dialog.foreground
+            font.family: dialog.fontFamily
+            font.pixelSize: Style.font.title
+            wrapMode: Text.WordWrap
+          }
+
+          Row {
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            spacing: Style.space(10)
+
+            Repeater {
+              model: [dialog.cancelText, dialog.confirmText]
+
+              BorderSurface {
+                required property int index
+                required property string modelData
+
+                readonly property bool selected: dialog.selectedIndex === index
+                readonly property bool destructive: index === 1
+
+                width: Style.space(88)
+                height: Style.space(34)
+                color: selected
+                  ? (destructive ? Util.alpha(Color.urgent, 0.22) : dialog.selectedBackground)
+                  : "transparent"
+                borderSpec: Border.flat(destructive
+                  ? (selected ? Color.urgent : Util.alpha(Color.urgent, 0.56))
+                  : (selected ? dialog.selectedText : Util.alpha(dialog.foreground, 0.38)), Style.normalBorderWidth)
+                radius: 0
+
+                Text {
+                  textFormat: Text.PlainText
+                  anchors.centerIn: parent
+                  text: modelData
+                  color: destructive ? (selected ? Color.urgent : dialog.foreground) : (selected ? dialog.selectedText : dialog.foreground)
+                  font.family: dialog.fontFamily
+                  font.pixelSize: Style.font.bodySmall
+                }
+
+                MouseArea {
+                  anchors.fill: parent
+                  hoverEnabled: true
+                  cursorShape: Qt.PointingHandCursor
+                  onEntered: dialog.selectedIndex = index
+                  onClicked: {
+                    if (index === 0) dialog.canceled()
+                    else dialog.confirmed()
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
   ListModel { id: displayModel }
 
   PointerMoveGate {
@@ -303,6 +498,24 @@ Item {
     property string pendingName: ""
     command: ["secret-tool", "clear", "service", "api-keys", "name", pendingName]
     onExited: listProc.running = true
+  }
+
+  // secret-tool has no rename primitive, so the value is read under the old
+  // name and stored under the new one, all inside the spawned shell — like
+  // copy, it never enters this process. printf is a builtin, so the value
+  // stays out of argv; the old entry is only cleared once the store succeeds.
+  Process {
+    id: renameProc
+    property string pendingOld: ""
+    property string pendingNew: ""
+    command: ["bash", "-c",
+      'value=$(secret-tool lookup service api-keys name "$1") || exit 1; printf %s "$value" | secret-tool store --label="$2" service api-keys name "$2" && secret-tool clear service api-keys name "$1"',
+      "omakeys-rename", pendingOld, pendingNew]
+    onExited: {
+      pendingOld = ""
+      pendingNew = ""
+      listProc.running = true
+    }
   }
 
   // The one place a secret value flows inward. It goes over stdin rather than
@@ -361,7 +574,7 @@ Item {
       Item {
         id: keyCatcher
         anchors.fill: parent
-        z: (root.deleteConfirmOpen || root.addFormOpen) ? 20 : 0
+        z: (root.deleteConfirmOpen || root.replaceConfirmOpen || root.addFormOpen) ? 20 : 0
         focus: true
 
         Keys.priority: Keys.BeforeItem
@@ -372,6 +585,11 @@ Item {
 
           if (root.deleteConfirmOpen) {
             if (deleteConfirm.handleKey(event)) event.accepted = true
+            return
+          }
+
+          if (root.replaceConfirmOpen) {
+            if (replaceConfirm.handleKey(event)) event.accepted = true
             return
           }
 
@@ -387,6 +605,9 @@ Item {
             event.accepted = true
           } else if (event.key === Qt.Key_Delete) {
             root.requestDelete(root.selectedIndex)
+            event.accepted = true
+          } else if (event.key === Qt.Key_F2) {
+            root.openRenameForm(root.selectedIndex)
             event.accepted = true
           } else if (event.key === Qt.Key_Up) {
             root.select(-1)
@@ -454,7 +675,7 @@ Item {
                 spacing: Style.space(10)
 
                 Text {
-                  text: "Add API key"
+                  text: root.renameSource ? "Rename API key" : "Add API key"
                   color: root.foreground
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.title
@@ -466,30 +687,29 @@ Item {
                   placeholderText: "Name  (e.g. OPENAI)"
                   foreground: root.foreground
                   font.family: root.fontFamily
-                  KeyNavigation.tab: addValue
-                  KeyNavigation.backtab: addValue
-                  onAccepted: root.submitAdd()
-                  // Retyping the name withdraws an armed replace: the warning
-                  // was about the old name, not whatever is in the field now.
-                  onTextChanged: {
-                    if (root.addReplaceArmed) {
-                      root.addReplaceArmed = false
-                      root.addNotice = ""
-                    }
-                  }
+                  KeyNavigation.tab: root.renameSource ? null : addValue
+                  KeyNavigation.backtab: root.renameSource ? null : addValue
+                  // Handled here rather than via onAccepted: TextInput emits
+                  // accepted but lets the Return propagate, so it would reach
+                  // keyCatcher after the form closed and activate the selected
+                  // row — or confirm the replace dialog it had just opened.
+                  Keys.onReturnPressed: function(event) { root.submitAdd(); event.accepted = true }
+                  Keys.onEnterPressed: function(event) { root.submitAdd(); event.accepted = true }
                   Keys.onEscapePressed: root.closeAddForm()
                 }
 
                 TextField {
                   id: addValue
                   width: parent.width
+                  visible: !root.renameSource
                   password: true
                   placeholderText: "API key"
                   foreground: root.foreground
                   font.family: root.fontFamily
                   KeyNavigation.tab: addName
                   KeyNavigation.backtab: addName
-                  onAccepted: root.submitAdd()
+                  Keys.onReturnPressed: function(event) { root.submitAdd(); event.accepted = true }
+                  Keys.onEnterPressed: function(event) { root.submitAdd(); event.accepted = true }
                   Keys.onEscapePressed: root.closeAddForm()
                 }
 
@@ -497,8 +717,8 @@ Item {
                   width: parent.width
                   visible: root.addNotice !== ""
                   text: root.addNotice
-                  color: root.addReplaceArmed ? Color.urgent : root.foreground
-                  opacity: root.addReplaceArmed ? 1 : 0.7
+                  color: root.foreground
+                  opacity: 0.7
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.caption
                   wrapMode: Text.WordWrap
@@ -513,7 +733,7 @@ Item {
                     spacing: Style.space(10)
 
                     Repeater {
-                      model: ["Cancel", "Save"]
+                      model: ["Cancel", root.renameSource ? "Rename" : "Save"]
 
                       BorderSurface {
                         required property int index
@@ -532,7 +752,7 @@ Item {
                           text: modelData
                           color: isSave ? root.selectedText : root.foreground
                           font.family: root.fontFamily
-                          font.pixelSize: Style.font.caption
+                          font.pixelSize: Style.font.bodySmall
                         }
 
                         MouseArea {
@@ -553,7 +773,7 @@ Item {
           }
         }
 
-        ConfirmDialog {
+        KeyConfirmDialog {
           id: deleteConfirm
 
           anchors.fill: parent
@@ -570,6 +790,25 @@ Item {
           cornerRadius: root.cornerRadius
           onCanceled: root.cancelDelete()
           onConfirmed: root.confirmDelete()
+        }
+
+        KeyConfirmDialog {
+          id: replaceConfirm
+
+          anchors.fill: parent
+          opened: root.replaceConfirmOpen
+          z: 10
+          message: "Replace key “" + root.replaceTarget + "”?"
+          confirmText: "Replace"
+          background: root.background
+          foreground: root.foreground
+          scrim: root.scrim
+          selectedBackground: root.selectedBackground
+          selectedText: root.selectedText
+          fontFamily: root.fontFamily
+          cornerRadius: root.cornerRadius
+          onCanceled: root.cancelReplace()
+          onConfirmed: root.confirmReplace()
         }
       }
 

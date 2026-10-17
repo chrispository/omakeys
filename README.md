@@ -68,8 +68,9 @@ that's the plugin's id, not part of the shortcut — so only the key chord in
 ### The selector
 
 Press **Super + A**, type to filter, **Enter** copies the highlighted key
-(**Shift + Enter** pastes it straight into the focused window, **Delete**
-removes it).
+(**Shift + Enter** pastes it straight into the focused window, **F2**
+renames it, **Delete** removes it). Renaming onto a name that's already
+taken asks before replacing that key.
 
 The first row is always **＋ Add Key**, and it's what's selected when the
 selector opens, so you never need to drop to a terminal to store one. Press
@@ -82,9 +83,10 @@ opens with two fields:
 | **API key** | Masked as you type |
 
 **Tab** and **Shift + Tab** move between the two fields, **Enter** saves from
-either one, **Esc** cancels. Typing a name that already exists asks once
-before replacing it, so re-adding a rotated key is a deliberate act rather
-than an accident.
+either one, **Esc** cancels. Saving under a name that already exists closes
+the form and asks for confirmation before replacing it (Enter again to
+replace, Esc to cancel), so re-adding a rotated key is a deliberate act
+rather than an accident.
 
 Once you start typing a filter the cursor moves to the first matching key, so
 the muscle-memory path — Super + A, type, Enter — still copies rather than
